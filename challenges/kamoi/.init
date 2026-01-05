@@ -1,0 +1,6 @@
+#!/usr/bin/exec-suid -- /bin/bash
+/challenge/genbinary-switch.py --source /challenge/challenge.c
+/opt/AFLplusplus/afl-clang-lto -O0 /challenge/challenge.c -o /challenge/chall
+cd /challenge && /opt/AFLplusplus/afl-showmap -b -o /challenge/fuzz_bitmap -- /challenge/chall < /challenge/input.txt
+chmod 644 /challenge/fuzz_bitmap
+rm -rf /challenge/challenge.c /challenge/input.txt /challenge/genbinary-switch.py

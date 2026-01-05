@@ -1,0 +1,8 @@
+#!/usr/bin/exec-suid -- /bin/bash
+# vim: set filetype=bash :
+
+gcc -O2 /challenge/vuln.c -o /challenge/stargazer
+chmod u+s /challenge/stargazer
+rm /challenge/vuln.c
+rm /challenge/stargazer.c
+rm /challenge/.init

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Portal · Blind Review Breakdown{% endblock %}
+{% block content %}
+<div class="row align-items-center">
+  <div class="col-lg-7">
+    <h1 class="display-5 fw-bold">Welcome authors & reviewers</h1>
+    <p class="lead">Submit groundbreaking research, review anonymously, and keep an eye on those reviewer utilities.</p>
+    <div class="d-flex gap-3">
+      <a class="btn btn-primary" href="{{ url_for('login_page') }}">Register / Login</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('search_page') }}">Explore Papers</a>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-header">System status</div>
+      <div class="card-body">
+        <ul class="list-unstyled mb-0">
+          <li>• Submission window: <strong>Open</strong></li>
+          <li>• Reviewer invites: <strong>Limited</strong></li>
+          <li>• Admin decisions: <strong>Pending</strong></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

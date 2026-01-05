@@ -1,0 +1,6 @@
+#!/bin/bash
+
+chmod 444 /challenge/DESCRIPTION.md
+chmod 444 /challenge/README.md
+chmod -s /challenge/ld-linux-x86-64.so.2
+chmod -s /challenge/libc.so.6

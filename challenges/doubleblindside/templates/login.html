@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Login · Blind Review Breakdown{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-header">Account Login</div>
+      <div class="card-body">
+        <form id="login-form" autocomplete="off">
+          <div class="mb-3">
+            <label class="form-label" for="login-username">Username</label>
+            <input class="form-control" id="login-username" name="username" type="text" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="login-password">Password</label>
+            <input class="form-control" id="login-password" name="password" type="password" required>
+          </div>
+          <div id="login-status" class="alert d-none" role="alert"></div>
+          <button type="submit" class="btn btn-primary w-100">Login</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card border-secondary" id="register">
+      <div class="card-header">Create a New Author Account</div>
+      <div class="card-body">
+        <form id="register-form" autocomplete="off">
+          <div class="mb-3">
+            <label class="form-label" for="register-username">Username</label>
+            <input class="form-control" id="register-username" name="username" type="text" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="register-password">Password (min 6 chars)</label>
+            <input class="form-control" id="register-password" name="password" type="password" required minlength="6">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="register-invite">Invite Code (optional)</label>
+            <input class="form-control" id="register-invite" name="invite_code" type="text">
+          </div>
+          <div id="register-status" class="alert d-none" role="alert"></div>
+          <button class="btn btn-outline-secondary w-100" type="submit">Register</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const { bindForm, formToJSON, apiFetch, setStatus } = window.Portal;
+
+  const loginStatus = document.getElementById('login-status');
+  const registerStatus = document.getElementById('register-status');
+
+  bindForm(document.getElementById('login-form'), async (form) => {
+    setStatus(loginStatus, 'Logging in…', 'info');
+    try {
+      await apiFetch('/api/login', { method: 'POST', data: formToJSON(form) });
+      setStatus(loginStatus, 'Success! Redirecting to dashboard…', 'success');
+      setTimeout(() => window.location.href = '/dashboard', 600);
+    } catch (err) {
+      setStatus(loginStatus, err.message || 'Login failed', 'danger');
+    }
+  });
+
+  bindForm(document.getElementById('register-form'), async (form) => {
+    const payload = formToJSON(form);
+    if (!payload.username || !payload.password) {
+      setStatus(registerStatus, 'Username and password are required', 'warning');
+      return;
+    }
+    if (payload.password.length < 6) {
+      setStatus(registerStatus, 'Password must be at least 6 characters', 'warning');
+      return;
+    }
+    setStatus(registerStatus, 'Creating account…', 'info');
+    try {
+      await apiFetch('/api/register', { method: 'POST', data: payload });
+      setStatus(registerStatus, 'Registration complete! Redirecting…', 'success');
+      setTimeout(() => window.location.href = '/dashboard', 700);
+    } catch (err) {
+      setStatus(registerStatus, err.message || 'Registration failed', 'danger');
+    }
+  });
+});
+</script>
+{% endblock %}

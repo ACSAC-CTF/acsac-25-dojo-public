@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Admin · Blind Review Breakdown{% endblock %}
+{% block content %}
+<div class="row gy-4">
+  <div class="col-lg-8">
+    <div class="card border-danger">
+      <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+        <span>Pending decisions</span>
+        <button class="btn btn-sm btn-light" id="refresh-admin">Refresh</button>
+      </div>
+      <div class="card-body">
+        <div id="admin-status" class="alert d-none" role="alert"></div>
+        <table class="table table-hover align-middle" id="admin-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Title</th>
+              <th>Author</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="5" class="text-muted">Loading queue…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4"></div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const { apiFetch, setStatus } = window.Portal;
+  const tableBody = document.querySelector('#admin-table tbody');
+  const statusBox = document.getElementById('admin-status');
+
+  async function loadQueue() {
+    setStatus(statusBox, 'Loading papers…', 'info');
+    try {
+      const data = await apiFetch('/api/admin/papers');
+      tableBody.innerHTML = '';
+      if (!data.papers.length) {
+        tableBody.innerHTML = '<tr><td colspan=\"5\" class=\"text-muted\">No submissions awaiting review.</td></tr>';
+      } else {
+        for (const paper of data.papers) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${paper.id}</td>
+            <td>${paper.title}</td>
+            <td>${paper.author}</td>
+            <td><span class=\"badge bg-secondary\">${paper.status}</span></td>
+            <td class=\"d-flex gap-2\">
+              <button class=\"btn btn-sm btn-success\" data-action=\"accept\" data-id=\"${paper.id}\">Accept</button>
+              <button class=\"btn btn-sm btn-outline-danger\" data-action=\"reject\" data-id=\"${paper.id}\">Reject</button>
+            </td>
+          `;
+          tableBody.appendChild(tr);
+        }
+      }
+      setStatus(statusBox, 'Queue updated.', 'success');
+    } catch (err) {
+      setStatus(statusBox, err.message || 'Failed to load queue', 'danger');
+    }
+  }
+
+  tableBody.addEventListener('click', async (event) => {
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+    const paperId = button.dataset.id;
+    const action = button.dataset.action;
+    setStatus(statusBox, `Processing paper ${paperId} (${action})…`, 'info');
+    try {
+      const endpoint = `/admin/papers/${paperId}/${action}`;
+      const resp = await apiFetch(endpoint, { method: 'POST' });
+      setStatus(statusBox, resp.message || 'Action completed', 'success');
+      if (resp.flag) {
+        window.alert(resp.flag);
+      }
+      await loadQueue();
+    } catch (err) {
+      setStatus(statusBox, err.message || 'Action failed', 'danger');
+    }
+  });
+
+  document.getElementById('refresh-admin').addEventListener('click', loadQueue);
+  loadQueue();
+});
+</script>
+{% endblock %}

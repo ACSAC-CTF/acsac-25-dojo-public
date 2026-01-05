@@ -1,0 +1,21 @@
+#!/bin/bash
+
+export PYTHONPATH=/usr/local/lib/python3.12/dist-packages:$PYTHONPATH
+sudo touch /home/hacker/gamefile.bin
+
+sudo /usr/bin/gcc /challenge/GameFileGen.c -o /challenge/gen
+sudo /usr/bin/gcc -g /challenge/GameEngine.c -o /challenge/engine
+
+#sudo patchelf --set-interpreter /challenge/ld-linux-x86-64.so.2 /challenge/engine
+sudo patchelf --set-rpath /challenge /challenge/engine
+
+sudo chmod 444 /challenge/GameFileGen.c
+sudo chmod 444 /challenge/GameFileGen.h
+sudo chmod 444 /challenge/GameEngine.c
+sudo chmod 444 /challenge/DESCRIPTION.md
+sudo chmod 444 /challenge/README.md
+sudo chmod 444 /challenge/ld-linux-x86-64.so.2
+sudo chmod 444 /challenge/libc.so.6
+
+sudo chmod +s /challenge/engine
+sudo chmod +s /challenge/gen

@@ -1,0 +1,15 @@
+body {
+  min-height: 100vh;
+}
+
+.main-card {
+  border-left: 4px solid #0d6efd;
+}
+
+.card-header {
+  font-weight: 600;
+}
+
+footer {
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}

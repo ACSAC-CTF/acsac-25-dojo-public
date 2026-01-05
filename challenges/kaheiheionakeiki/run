@@ -1,0 +1,324 @@
+#!/usr/bin/exec-suid -- /usr/bin/python3
+
+import time
+import hashlib
+import os
+import random
+import string
+import json
+import base64
+from flask import Flask, jsonify, request
+from Crypto.Util.strxor import strxor
+from Crypto.Cipher import AES
+from Crypto.PublicKey import RSA
+
+# ============================================================
+# NALANI LAYER (Mintaka)
+# ============================================================
+
+def is_prime(n, k=5):
+    if n <= 1: return False
+    if n <= 3: return True
+    if n % 2 == 0: return False
+    d = n - 1
+    while d % 2 == 0:
+        d //= 2
+    for _ in range(k):
+        a = random.randrange(2, n - 1)
+        x = pow(a, d, n)
+        if x == 1 or x == n - 1:
+            continue
+        for _ in range(d.bit_length() - 1):
+            x = pow(x, 2, n)
+            if x == n - 1:
+                break
+        else:
+            return False
+    return True
+
+def get_prime(bits):
+    while True:
+        p = random.getrandbits(bits)
+        if is_prime(p):
+            return p
+
+def extended_gcd(a, b):
+    if a == 0: return (b, 0, 1)
+    d, x1, y1 = extended_gcd(b % a, a)
+    return (d, y1 - (b // a) * x1, x1)
+
+def mod_inverse(a, m):
+    d, x, y = extended_gcd(a, m)
+    if d != 1: raise Exception('modular inverse does not exist')
+    return x % m
+
+def generate_rsa_key(bits):
+    p = get_prime(bits // 2)
+    q = get_prime(bits // 2)
+    n = p * q
+    phi = (p - 1) * (q - 1)
+    e = 65537
+    d = mod_inverse(e, phi)
+    return ((n, e), (n, d))
+
+def generate_vulnerable_rsa_key(bits):
+    p = get_prime(bits // 2)
+    q = get_prime(bits // 2)
+    n = p * q
+    phi = (p - 1) * (q - 1)
+    d = random.randint(3, int(n**0.25) // 3)
+    if d % 2 == 0: d += 1
+    e = mod_inverse(d, phi)
+    return ((n, e), (n, d))
+
+_users = {}
+_system_logs = []
+_pending_reset = {"token_hash": None}
+
+_symmetric_key = None
+_encrypted_clue = None
+_oracle_query_count = 0
+
+_archivists_key = None
+
+# Nalani Layer (Padding Oracle)
+_rsa_n = None
+_rsa_e = None
+_rsa_d = None
+_sealed_flag = None
+_rsa_sealed_aes_key_b64 = None
+_reset_prefix_len = int(os.environ.get("RESET_HASH_PREFIX_LEN", "6"))
+
+class User:
+    def __init__(self, username):
+        self.username = username
+
+def add_log(message):
+    _system_logs.append(f"[{int(time.time())}] {message}")
+
+# ============================================================
+#  INITIALIZATION UNDER KA HEI-HEI ONA KEIKI
+# ============================================================
+
+def init_db():
+    global _users, _symmetric_key, _encrypted_clue, _archivists_key
+    
+    _users = {"admin": User("admin")}
+    _symmetric_key = int.from_bytes(os.urandom(6), 'big')
+
+    # Nalani (Mintaka) Layer clue
+    clue = {
+        "constellation": "Ka hei-hei ona keiki",
+        "hint": "Seek the Star Registry and the Belt Oracle.",
+        "paths": {
+            "public_key": "/api/starlit/public_key",
+            "sealed_flag": "/api/starlit/sealed_flag",
+            "padding_oracle": "/api/crypto/belt_padding_oracle"
+        }
+    }
+
+    clue_message = json.dumps(clue)
+
+    key_bytes = _symmetric_key.to_bytes(6, 'big')
+    message_bytes = clue_message.encode()
+    repeated_key = (key_bytes * (len(message_bytes) // len(key_bytes) + 1))[:len(message_bytes)]
+    _encrypted_clue = strxor(message_bytes, repeated_key)
+
+    add_log("System initialized under the Ka hei-hei ona keiki sky.")
+    add_log(f"Encrypted Clue: {_encrypted_clue.hex()}")
+    add_log("Quantum oracle at /api/quantum/keawe_oracle. 50 queries.")
+
+    # Initialize Nalani (Mintaka) padding oracle
+    init_nalani_padding_oracle()
+
+
+def _read_flag_bytes():
+    try:
+        with open("/flag", "rb") as f:
+            data = f.read()
+        return data[:-1] if data.endswith(b"\n") else data
+    except FileNotFoundError:
+        return b"acsacctf{placeholder_flag_for_dev}"
+
+def _int_to_bytes(i: int, length: int) -> bytes:
+    return i.to_bytes(length, "big")
+
+def _bytes_to_int(b: bytes) -> int:
+    return int.from_bytes(b, "big")
+
+def _k_len(n: int) -> int:
+    return (n.bit_length() + 7) // 8
+
+def _pkcs1_v1_5_pad_for_encrypt(message: bytes, k: int) -> bytes:
+    if len(message) > k - 11:
+        raise ValueError("message too long")
+    ps_len = k - len(message) - 3
+    ps = bytearray()
+    while len(ps) < ps_len:
+        b = os.urandom(1)
+        if b != b"\x00":
+            ps.extend(b)
+    return b"\x00\x02" + bytes(ps) + b"\x00" + message
+
+def _pkcs1_v1_5_padding_check(em: bytes) -> bool:
+    if len(em) < 11:
+        return False
+    if em[0] != 0x00 or em[1] != 0x02:
+        return False
+    try:
+        ps_end = em.index(b"\x00", 2)
+    except ValueError:
+        return False
+    ps = em[2:ps_end]
+    if len(ps) < 8:
+        return False
+    if any(b == 0 for b in ps):
+        return False
+    return True
+
+# ============================================================
+# NALANI (Mintaka)
+# ============================================================
+
+def init_nalani_padding_oracle():
+    global _rsa_n, _rsa_e, _rsa_d, _sealed_flag, _rsa_sealed_aes_key_b64
+
+    rsa_bits = int(os.environ.get("RSA_BITS", "1024"))
+    rsa_bits = max(512, min(4096, rsa_bits))
+    rsa_key = RSA.generate(rsa_bits)
+
+    _rsa_n = rsa_key.n
+    _rsa_e = rsa_key.e
+    _rsa_d = rsa_key.d
+
+    flag_bytes = _read_flag_bytes()
+    aes_key = os.urandom(16)
+    nonce = os.urandom(12)
+
+    cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
+    ciphertext, tag = cipher.encrypt_and_digest(flag_bytes)
+
+    _sealed_flag = {
+        "ciphertext_b64": base64.b64encode(ciphertext).decode(),
+        "nonce_b64": base64.b64encode(nonce).decode(),
+        "tag_b64": base64.b64encode(tag).decode(),
+        "algorithm": "AES-GCM-128",
+        "constellation": "Ka hei-hei ona keiki",
+    }
+
+    k = _k_len(_rsa_n)
+    em = _pkcs1_v1_5_pad_for_encrypt(aes_key, k)
+    m = _bytes_to_int(em)
+    c = pow(m, _rsa_e, _rsa_n)
+    c_bytes = _int_to_bytes(c, k)
+
+    _rsa_sealed_aes_key_b64 = base64.b64encode(c_bytes).decode()
+
+    add_log("Starlit seal prepared at /api/starlit/sealed_flag.")
+    add_log(f"RSA_SEALED_AES_KEY_B64: {_rsa_sealed_aes_key_b64}")
+    add_log("Consult /api/starlit/public_key and /api/crypto/belt_padding_oracle.")
+    add_log(f"RSA constellation parameters: {rsa_bits} bits.")
+
+# ============================================================
+# Flask App
+# ============================================================
+
+app = Flask(__name__)
+init_db()
+
+@app.route('/')
+def index():
+    return "Ka hei-hei ona keiki Archive is online among the stars."
+
+# ============================================================
+#  KAʻŪ LAYER (Alnitak)
+# ============================================================
+
+@app.route('/api/reset_password', methods=['POST'])
+def request_password_reset():
+    username = request.get_json().get('username')
+    if not _users.get(username):
+        return jsonify({"error": "User not found"}), 404
+    token = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
+    _pending_reset["token_hash"] = hashlib.sha256(token.encode()).hexdigest()
+    add_log(f"Reset token generated for {username}.")
+    return jsonify({"message": "Reset token generated."})
+
+@app.route('/api/system/health_check', methods=['GET'])
+def system_health_check():
+    if _pending_reset["token_hash"]:
+        leaked = _pending_reset["token_hash"][:_reset_prefix_len]
+        return jsonify({
+            "pending_reset_hash_prefix": leaked,
+            "prefix_len": _reset_prefix_len
+        })
+    return jsonify({"pending_reset_hash_prefix": None, "prefix_len": _reset_prefix_len})
+
+@app.route('/api/admin/view_system_logs', methods=['GET'])
+def view_system_logs():
+    auth_header = request.headers.get('X-Reset-Token')
+    if not auth_header:
+        return jsonify({"error": "Token required"}), 401
+    token_hash = hashlib.sha256(auth_header.encode()).hexdigest()
+    if _pending_reset["token_hash"] and token_hash[:_reset_prefix_len] == _pending_reset["token_hash"][:_reset_prefix_len]:
+        _pending_reset["token_hash"] = None
+        return jsonify({"logs": _system_logs})
+    return jsonify({"error": "Invalid token"}), 403
+
+# ============================================================
+#  KEAWE LAYER (Alnilam)
+# ============================================================
+
+@app.route('/api/quantum/keawe_oracle', methods=['POST'])
+def keawe_oracle():
+    global _oracle_query_count
+    if _oracle_query_count >= 50:
+        return jsonify({"error": "Query limit exceeded"}), 429
+    data = request.get_json()
+    start = int(data.get('range_start'))
+    end = int(data.get('range_end'))
+    _oracle_query_count += 1
+    return jsonify({"in_range": start <= _symmetric_key <= end})
+
+# ============================================================
+#  NALANI LAYER (Mintaka)
+# ============================================================
+
+@app.route('/api/starlit/public_key', methods=['GET'])
+def starlit_public_key():
+    bits = _k_len(_rsa_n) * 8 if _rsa_n else None
+    return jsonify({
+        "constellation": "Ka hei-hei ona keiki",
+        "n": _rsa_n,
+        "e": _rsa_e,
+        "bits": bits
+    })
+
+@app.route('/api/starlit/sealed_flag', methods=['GET'])
+def starlit_sealed_flag():
+    return jsonify(_sealed_flag)
+
+@app.route('/api/crypto/belt_padding_oracle', methods=['POST'])
+def belt_padding_oracle():
+    try:
+        data = request.get_json(force=True) or {}
+        ct_b64 = data.get("ciphertext_b64")
+        ct_hex = data.get("ciphertext_hex")
+        if ct_b64:
+            ct = base64.b64decode(ct_b64, validate=True)
+        elif ct_hex:
+            ct = bytes.fromhex(ct_hex)
+        else:
+            return jsonify({"padding_ok": False})
+
+        k = _k_len(_rsa_n)
+        c_int = _bytes_to_int(ct)
+        m_int = pow(c_int, _rsa_d, _rsa_n)
+        em = _int_to_bytes(m_int, k)
+        ok = _pkcs1_v1_5_padding_check(em)
+        return jsonify({"padding_ok": bool(ok)})
+    except Exception:
+        return jsonify({"padding_ok": False})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)

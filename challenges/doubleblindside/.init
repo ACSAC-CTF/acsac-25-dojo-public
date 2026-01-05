@@ -1,0 +1,13 @@
+#!/usr/bin/exec-suid -- /bin/bash
+# vim: set filetype=bash :
+
+/challenge/init_db.py
+rm -f /challenge/init_db.py
+rm -f .init_db.py
+
+mv conference.db /challenge/conference.db
+mv jwt_master.secret /challenge/jwt_master.secret
+chmod 600 /challenge/conference.db
+chmod 600 /challenge/jwt_master.secret
+
+FLASK_APP=/challenge/app.py /challenge/app.py & 

@@ -1,0 +1,45 @@
+id: acsac-2025-ctf
+name: ACSAC 2025 CTF
+type: public
+
+award:
+  emoji: ⭐
+
+modules:
+  - id: challenges
+    name: ACSAC 2025 CTF Challenges
+
+    challenges:
+      - id: panana
+        name: Pānānā
+
+      - id: postmortem
+        name: Hōkūpaʻa - postmortem
+      
+      - id: halulu
+        name: Halulu
+        image: prathamgupta36/sammy-challenge-acsac:0.5
+      
+      - id: kaheiheionakeiki
+        name: Ka hei hei o nā keiki
+        image: prathamgupta36/acsac-test:0.10
+
+      - id: iwakelii
+        name: Iwakeli`i
+      
+      - id: doubleblindside
+        name: Kūkalaniʻehu - doubleblindside
+        image: hlw1234/acsac25-doubleblindside:0.5
+
+      - id: kamoi
+        name: Ka Mō'ī
+        image: x3ero0/acsac25-kamoi:1.3
+
+      - id: kalupeokawelo
+        name: Ka lupe o kawelo
+
+      - id: manaiakalani
+        name: Mānaiakalani
+
+      - id: stargazer
+        name: Kaʻahupāhau - Stargazer

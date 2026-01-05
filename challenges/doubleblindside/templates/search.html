@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Search · Blind Review Breakdown{% endblock %}
+{% block content %}
+<div class="row mb-4">
+  <div class="col-lg-8">
+    <form id="search-form" class="d-flex gap-2" role="search" autocomplete="off">
+      <input class="form-control" id="search-query" name="query" type="search" required>
+      <button class="btn btn-outline-primary" type="submit">Search</button>
+    </form>
+    <div id="search-status" class="alert d-none mt-3" role="alert"></div>
+    {% if current_role == 'author' %}
+    <p class="text-muted small mt-2">Author accounts can only see their own submissions here.</p>
+    {% endif %}
+  </div>
+</div>
+<div class="row gy-4">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header">Results</div>
+      <div class="card-body">
+        <table class="table table-striped" id="results-table">
+          <thead>
+            <tr>
+              <th scope="col">ID</th>
+              <th scope="col">Title</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="3" class="text-muted">Run a query to view papers.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const { apiFetch, bindForm, setStatus } = window.Portal;
+  const tableBody = document.querySelector('#results-table tbody');
+  const statusBox = document.getElementById('search-status');
+
+  function renderRows(results) {
+    tableBody.innerHTML = '';
+    if (!results.length) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="3" class="text-muted">No results found.</td>';
+      tableBody.appendChild(tr);
+      return;
+    }
+    for (const row of results) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${row.id}</td>
+        <td>${row.title}</td>
+        <td><span class="badge bg-info text-dark">${row.status}</span></td>
+      `;
+      tableBody.appendChild(tr);
+    }
+  }
+
+  async function runSearch(query) {
+    setStatus(statusBox, `Searching for "${query || '*'}"...`, 'info');
+    try {
+      const data = await apiFetch(`/api/search?query=${encodeURIComponent(query)}`);
+      renderRows(data.results || []);
+      setStatus(statusBox, `Found ${data.results.length} result(s).`, 'success');
+    } catch (err) {
+      renderRows([]);
+      setStatus(statusBox, err.message || 'Search failed', 'danger');
+    }
+  }
+
+  bindForm(document.getElementById('search-form'), (form) => {
+    const query = form.query.value.trim();
+    runSearch(query);
+  });
+  runSearch('');
+});
+</script>
+{% endblock %}

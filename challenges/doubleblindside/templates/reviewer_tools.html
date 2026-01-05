@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Reviewer Tools · Blind Review Breakdown{% endblock %}
+{% block content %}
+<div class="alert alert-warning" role="alert">
+  Supplemental materials must be anonymized. This fetcher naively validates links.
+</div>
+<div class="card shadow-sm">
+  <div class="card-header">Supplemental fetcher</div>
+  <div class="card-body">
+    <form id="fetch-form" autocomplete="off">
+      <label class="form-label" for="fetch-url">Supplemental URL</label>
+      <input class="form-control" id="fetch-url" name="url" type="url" required>
+      <label class="form-label mt-3" for="fetch-purpose">Purpose (optional)</label>
+      <input class="form-control" id="fetch-purpose" name="purpose" type="text">
+      <div id="fetch-status" class="alert d-none mt-3" role="alert"></div>
+      <button class="btn btn-outline-danger mt-3" type="submit">Fetch</button>
+    </form>
+    <hr>
+    <h5>Response Preview</h5>
+    <pre class="bg-dark text-light p-3 small" id="fetch-preview">No request yet.</pre>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const { bindForm, formToJSON, apiFetch, setStatus } = window.Portal;
+  const statusBox = document.getElementById('fetch-status');
+  const preview = document.getElementById('fetch-preview');
+
+  bindForm(document.getElementById('fetch-form'), async (form) => {
+    const payload = formToJSON(form);
+    if (!payload.url) {
+      setStatus(statusBox, 'URL is required', 'warning');
+      return;
+    }
+    setStatus(statusBox, 'Fetching supplemental URL…', 'info');
+    preview.textContent = 'Waiting for response…';
+    try {
+      const data = await apiFetch('/api/reviewer/materials/check', { method: 'POST', data: payload });
+      setStatus(statusBox, `Fetched ${data.fetched_url} (status ${data.status})`, 'success');
+      preview.textContent = [
+        `URL: ${data.fetched_url}`,
+        `Purpose: ${data.purpose}`,
+        `Status: ${data.status}`,
+        '',
+        data.body_preview || '[no body preview]',
+      ].join('\n');
+    } catch (err) {
+      setStatus(statusBox, err.message || 'Fetch failed', 'danger');
+      if (err.payload?.body_preview) {
+        preview.textContent = err.payload.body_preview;
+      }
+    }
+  });
+});
+</script>
+{% endblock %}

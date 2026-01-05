@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Blind Review Breakdown{% endblock %}
+{% block content %}
+<div class="row gy-4">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>My Papers</span>
+        <button class="btn btn-sm btn-outline-secondary" id="refresh-papers">Refresh</button>
+      </div>
+      <div class="card-body">
+        <div id="papers-status" class="alert d-none" role="alert"></div>
+        <table class="table table-sm align-middle" id="papers-table">
+          <thead>
+            <tr>
+              <th scope="col">Paper ID</th>
+              <th scope="col">Title</th>
+              <th scope="col">Status</th>
+              <th scope="col">Submitted</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="4" class="text-muted">Loading…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card border-info">
+      <div class="card-header">Submit new paper</div>
+      <div class="card-body">
+        <form id="paper-form">
+          <div class="mb-3">
+            <label class="form-label" for="paper-title">Title</label>
+            <input class="form-control" id="paper-title" name="title" type="text" required placeholder="Blindfolded Backdoors">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="paper-abstract">Abstract</label>
+            <textarea class="form-control" id="paper-abstract" name="abstract" rows="4" required placeholder="Paste sanitized abstract"></textarea>
+          </div>
+          <div id="paper-status" class="alert d-none" role="alert"></div>
+          <button class="btn btn-info w-100" type="submit">Submit Paper</button>
+        </form>
+      </div>
+    </div>
+    <div class="card border-warning mt-4">
+      <div class="card-header">Reviewer Upgrade</div>
+      <div class="card-body">
+        <form id="invite-form">
+          <label class="form-label" for="invite-code">Redeem invite code</label>
+          <div class="input-group">
+            <input class="form-control" id="invite-code" name="code" required>
+            <button class="btn btn-warning" type="submit">Redeem</button>
+          </div>
+          <div id="invite-status" class="alert d-none mt-3" role="alert"></div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const { apiFetch, bindForm, formToJSON, setStatus } = window.Portal;
+  const tableBody = document.querySelector('#papers-table tbody');
+  const papersStatus = document.getElementById('papers-status');
+  const paperStatus = document.getElementById('paper-status');
+  const inviteStatus = document.getElementById('invite-status');
+
+  async function loadPapers() {
+    setStatus(papersStatus, 'Loading submissions…', 'info');
+    try {
+      const data = await apiFetch('/api/papers/mine');
+      const rows = data.papers;
+      tableBody.innerHTML = '';
+      if (!rows.length) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td colspan=\"4\" class=\"text-muted\">No submissions yet.</td>';
+        tableBody.appendChild(tr);
+      } else {
+        for (const paper of rows) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${paper.id}</td>
+            <td>${paper.title}</td>
+            <td><span class=\"badge bg-secondary\">${paper.status}</span></td>
+            <td>${paper.created_at || '—'}</td>
+          `;
+          tableBody.appendChild(tr);
+        }
+      }
+      setStatus(papersStatus, 'Updated.', 'success');
+    } catch (err) {
+      setStatus(papersStatus, err.message || 'Failed to load papers', 'danger');
+    }
+  }
+
+  bindForm(document.getElementById('paper-form'), async (form) => {
+    const payload = formToJSON(form);
+    setStatus(paperStatus, 'Submitting paper…', 'info');
+    try {
+      await apiFetch('/api/papers', { method: 'POST', data: payload });
+      form.reset();
+      setStatus(paperStatus, 'Paper submitted! Refreshing list…', 'success');
+      await loadPapers();
+    } catch (err) {
+      setStatus(paperStatus, err.message || 'Submission failed', 'danger');
+    }
+  });
+
+  bindForm(document.getElementById('invite-form'), async (form) => {
+    const payload = formToJSON(form);
+    setStatus(inviteStatus, 'Redeeming invite…', 'info');
+    try {
+      await apiFetch('/api/reviewers/redeem', { method: 'POST', data: payload });
+      setStatus(inviteStatus, 'Role upgraded! Refreshing page…', 'success');
+      setTimeout(() => window.location.reload(), 800);
+    } catch (err) {
+      setStatus(inviteStatus, err.message || 'Invite redemption failed', 'danger');
+    }
+  });
+
+  document.getElementById('refresh-papers').addEventListener('click', loadPapers);
+  loadPapers();
+});
+</script>
+{% endblock %}
